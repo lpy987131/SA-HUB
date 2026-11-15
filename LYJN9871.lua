@@ -261,10 +261,6 @@ local tag = Window:Tag({
     Radius = 3,
 })
 
-local MainTab = Window:Tab({ Title = "通用", Icon = "" })
-
-})
-
 local MainTab = Window:Tab({ Title = "脚本中心", Icon = "" })
 
 MainTab:Button({
