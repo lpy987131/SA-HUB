@@ -1,18 +1,3 @@
---[[==========================================================================
-	SA HUB · 入口  (SA_HUB.lua)
-	------------------------------------------------------------------
-	仓库结构：
-		SA_HUB.lua          ← 本文件，loadstring 只拉这个
-		src/UI.lua          ← 界面框架（窗口 / 控件 / 启动动画）
-		src/Features.lua    ← 功能模块（玩家 / 视觉 / 战斗 …）
-
-	使用前把下面 Base 改成你自己的仓库地址：
-		https://raw.githubusercontent.com/用户名/仓库名/分支/
-
-	然后执行：
-		loadstring(game:HttpGet("https://raw.githubusercontent.com/用户名/仓库名/main/SA_HUB.lua"))()
-==========================================================================]]
-
 local CONFIG = {
 	Base = "https://raw.githubusercontent.com/USER/REPO/main/",
 	Name = "SA",
@@ -46,9 +31,7 @@ local function run(source)
 	return result
 end
 
---==========================================================================
--- 1) 界面框架
---==========================================================================
+
 local uiSource = fetchFile("src/UI.lua")
 if not uiSource then
 	return
@@ -75,9 +58,6 @@ local Window = UI.Window({
 	configFile = CONFIG.ConfigFile,
 })
 
---==========================================================================
--- 2) 功能模块
---==========================================================================
 local features = nil
 local featureSource = fetchFile("src/Features.lua")
 if featureSource then
@@ -99,9 +79,6 @@ if featureSource then
 	end
 end
 
---==========================================================================
--- 3) 收尾
---==========================================================================
 splash:Finish(function()
 	Window:Show()
 	if features then
