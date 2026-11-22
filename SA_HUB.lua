@@ -1,24 +1,3 @@
---[[==========================================================================
-	SA HUB  ·  单文件完整版  (SA_HUB.lua)
-	------------------------------------------------------------------
-	上传到 GitHub 仓库任意位置，然后执行：
-
-		loadstring(game:HttpGet("https://raw.githubusercontent.com/你的用户名/你的仓库名/main/SA_HUB.lua"))()
-
-	不需要改任何东西；文件名保持 SA_HUB.lua 即可（改名也行，地址对上就行）。
-
-	本文件内部结构（三部分，逻辑上依然分开）：
-		[1] UI 框架    —— 窗口 / 控件 / 启动动画 / 主题 / 配置读写
-		[2] 功能模块   —— 玩家 / 视觉 / 战斗 的各项功能
-		[3] 入口       —— 把两边接起来，跑启动动画，进主界面
-
-	想拆成多文件的话：把 [1] [2] 各自剪出来存成 src/UI.lua、src/Features.lua，
-	用仓库里的 SA_HUB.lua（多文件入口版）加载即可。
-==========================================================================]]
-
---==========================================================================
--- 0) 配置
---==========================================================================
 local CONFIG = {
 	Name = "SA",
 	FullName = "SA HUB",
@@ -26,37 +5,10 @@ local CONFIG = {
 	Accent = Color3.fromRGB(46, 158, 255),
 	ToggleKey = Enum.KeyCode.RightShift,
 	ConfigFile = "SAHub_config.json",
-	-- 单文件版不需要仓库地址；只有「重新载入脚本」按钮用得到。
-	-- 想让那个按钮可用，就把自己的 raw 地址填进来（留空也能用，只是按钮提示重开）。
 	RawUrl = (getgenv and getgenv().SA_HUB_RAW) or "",
 }
 
---==========================================================================
--- 1) UI 框架（原 src/UI.lua）
---==========================================================================
 local UI = (function()
- --[[==========================================================================
- 	SA HUB · UI 框架  (src/UI.lua)
- 	------------------------------------------------------------------
- 	纯界面层，不含任何具体功能。可以被任何脚本复用。
- 	API 简介：
- 		local UI = loadstring(game:HttpGet(".../src/UI.lua"))()
- 		local splash = UI.Splash({ name = "SA", fullName = "SA HUB", version = "1.0.0" })
- 		local Window = UI.Window({ title = "SA HUB", toggleKey = Enum.KeyCode.RightShift })
-
- 		local tab = Window:Tab({ Name = "首页", Icon = "★" })
- 		local sec = tab:Section("欢迎")
- 		sec:Toggle({ Name = "开关", Flag = "myToggle", Default = false, Callback = function(v) end })
- 		sec:Slider({ Name = "数值", Min = 0, Max = 100, Default = 50, Flag = "mySlider", Callback = function(v) end })
- 		sec:Button({ Name = "按钮", Callback = function() end })
- 		sec:Dropdown({ Name = "选择", Options = {"A","B"}, Default = "A", Flag = "myPick", Callback = function(v) end })
- 		sec:Textbox({ Name = "输入", Placeholder = "…", Flag = "myText", Callback = function(v) end })
- 		sec:Keybind({ Name = "按键", Default = Enum.KeyCode.F, Flag = "myKey" })
- 		sec:Label("说明文字")
-
- 	splash:Finish(function() Window:Show() end)
- ==========================================================================]]
-
  local Players = game:GetService("Players")
  local UserInputService = game:GetService("UserInputService")
  local TweenService = game:GetService("TweenService")
@@ -85,16 +37,13 @@ local UI = (function()
 
  local Theme = UI.Theme
 
- --==========================================================================
- -- 工具
- --==========================================================================
  local function new(class, props, children)
  	local inst = Instance.new(class)
  	if props then
  		for key, value in pairs(props) do
  			if key ~= "Parent" then
- 				-- 每个属性单独 pcall：个别客户端/执行器不支持某个属性时只跳过它，
- 				-- 不会因为这一个属性把整个界面炸掉
+ 				
+ 			
  				pcall(function()
  					inst[key] = value
  				end)
@@ -190,7 +139,7 @@ local UI = (function()
  	if ok and tween then
  		return tween
  	end
- 	-- 个别执行器里 TweenService 不可用：直接落到最终值，动效没了但功能一切正常
+ 	
  	if props then
  		for key, value in pairs(props) do
  			pcall(function()
@@ -217,7 +166,6 @@ local UI = (function()
  	tween = tw,
  }
 
- -- 挂载点
  local guiParent
  do
  	local ok, hidden = pcall(function()
@@ -234,10 +182,6 @@ local UI = (function()
  end
  UI.GuiParent = guiParent
 
- --==========================================================================
- -- 徽标（皇冠 + 轨道环 + 霓虹渐变字）
- --   纯 UI 原生绘制，不依赖任何图片 ID，换主题色会自动跟着变
- --==========================================================================
  local function atan2(y, x)
  	if math.atan2 then
  		return math.atan2(y, x)
