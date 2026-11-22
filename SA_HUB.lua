@@ -1,14 +1,62 @@
+--[[==========================================================================
+	SA HUB  ·  单文件完整版  (SA_HUB.lua)
+	------------------------------------------------------------------
+	上传到 GitHub 仓库任意位置，然后执行：
+
+		loadstring(game:HttpGet("https://raw.githubusercontent.com/你的用户名/你的仓库名/main/SA_HUB.lua"))()
+
+	不需要改任何东西；文件名保持 SA_HUB.lua 即可（改名也行，地址对上就行）。
+
+	本文件内部结构（三部分，逻辑上依然分开）：
+		[1] UI 框架    —— 窗口 / 控件 / 启动动画 / 主题 / 配置读写
+		[2] 功能模块   —— 玩家 / 视觉 / 战斗 的各项功能
+		[3] 入口       —— 把两边接起来，跑启动动画，进主界面
+
+	想拆成多文件的话：把 [1] [2] 各自剪出来存成 src/UI.lua、src/Features.lua，
+	用仓库里的 SA_HUB.lua（多文件入口版）加载即可。
+==========================================================================]]
+
+--==========================================================================
+-- 0) 配置
+--==========================================================================
 local CONFIG = {
 	Name = "SA",
 	FullName = "SA HUB",
-	Version = "1.2.0",
+	Version = "1.3.1",
 	Accent = Color3.fromRGB(46, 158, 255),
 	ToggleKey = Enum.KeyCode.RightShift,
 	ConfigFile = "SAHub_config.json",
+	-- 单文件版不需要仓库地址；只有「重新载入脚本」按钮用得到。
+	-- 想让那个按钮可用，就把自己的 raw 地址填进来（留空也能用，只是按钮提示重开）。
 	RawUrl = (getgenv and getgenv().SA_HUB_RAW) or "",
 }
 
+--==========================================================================
+-- 1) UI 框架（原 src/UI.lua）
+--==========================================================================
 local UI = (function()
+ --[[==========================================================================
+ 	SA HUB · UI 框架  (src/UI.lua)
+ 	------------------------------------------------------------------
+ 	纯界面层，不含任何具体功能。可以被任何脚本复用。
+ 	API 简介：
+ 		local UI = loadstring(game:HttpGet(".../src/UI.lua"))()
+ 		local splash = UI.Splash({ name = "SA", fullName = "SA HUB", version = "1.0.0" })
+ 		local Window = UI.Window({ title = "SA HUB", toggleKey = Enum.KeyCode.RightShift })
+
+ 		local tab = Window:Tab({ Name = "首页", Icon = "★" })
+ 		local sec = tab:Section("欢迎")
+ 		sec:Toggle({ Name = "开关", Flag = "myToggle", Default = false, Callback = function(v) end })
+ 		sec:Slider({ Name = "数值", Min = 0, Max = 100, Default = 50, Flag = "mySlider", Callback = function(v) end })
+ 		sec:Button({ Name = "按钮", Callback = function() end })
+ 		sec:Dropdown({ Name = "选择", Options = {"A","B"}, Default = "A", Flag = "myPick", Callback = function(v) end })
+ 		sec:Textbox({ Name = "输入", Placeholder = "…", Flag = "myText", Callback = function(v) end })
+ 		sec:Keybind({ Name = "按键", Default = Enum.KeyCode.F, Flag = "myKey" })
+ 		sec:Label("说明文字")
+
+ 	splash:Finish(function() Window:Show() end)
+ ==========================================================================]]
+
  local Players = game:GetService("Players")
  local UserInputService = game:GetService("UserInputService")
  local TweenService = game:GetService("TweenService")
@@ -37,22 +85,35 @@ local UI = (function()
 
  local Theme = UI.Theme
 
+ --==========================================================================
+ -- 工具
+ --==========================================================================
  local function new(class, props, children)
  	local inst = Instance.new(class)
  	if props then
  		for key, value in pairs(props) do
  			if key ~= "Parent" then
- 				inst[key] = value
+ 				-- 每个属性单独 pcall：个别客户端/执行器不支持某个属性时只跳过它，
+ 				-- 不会因为这一个属性把整个界面炸掉
+ 				pcall(function()
+ 					inst[key] = value
+ 				end)
  			end
  		end
  	end
  	if children then
  		for _, child in ipairs(children) do
- 			child.Parent = inst
+ 			if child then
+ 				pcall(function()
+ 					child.Parent = inst
+ 				end)
+ 			end
  		end
  	end
  	if props and props.Parent then
- 		inst.Parent = props.Parent
+ 		pcall(function()
+ 			inst.Parent = props.Parent
+ 		end)
  	end
  	return inst
  end
@@ -92,14 +153,52 @@ local UI = (function()
  	})
  end
 
+ -- 字体兜底：某些客户端缺少个别字体枚举，取不到就用后备字体，避免整段脚本报错
+ local function pickFont(name, fallback)
+ 	local ok, value = pcall(function()
+ 		return Enum.Font[name]
+ 	end)
+ 	if ok and value then
+ 		return value
+ 	end
+ 	local ok2, fb = pcall(function()
+ 		return Enum.Font[fallback or "Gotham"]
+ 	end)
+ 	if ok2 and fb then
+ 		return fb
+ 	end
+ 	local ok3, last = pcall(function()
+ 		return Enum.Font.SourceSans
+ 	end)
+ 	if ok3 and last then
+ 		return last
+ 	end
+ 	return nil
+ end
+ UI.PickFont = pickFont
+
  local function tw(inst, time, props, style, dir)
  	if not inst then
  		return nil
  	end
- 	local info = TweenInfo.new(time or 0.2, style or Enum.EasingStyle.Quint, dir or Enum.EasingDirection.Out)
- 	local tween = TweenService:Create(inst, info, props)
- 	tween:Play()
- 	return tween
+ 	local ok, tween = pcall(function()
+ 		local info = TweenInfo.new(time or 0.2, style or Enum.EasingStyle.Quint, dir or Enum.EasingDirection.Out)
+ 		local t = TweenService:Create(inst, info, props)
+ 		t:Play()
+ 		return t
+ 	end)
+ 	if ok and tween then
+ 		return tween
+ 	end
+ 	-- 个别执行器里 TweenService 不可用：直接落到最终值，动效没了但功能一切正常
+ 	if props then
+ 		for key, value in pairs(props) do
+ 			pcall(function()
+ 				inst[key] = value
+ 			end)
+ 		end
+ 	end
+ 	return nil
  end
 
  local function fmtNumber(n)
@@ -270,7 +369,7 @@ local UI = (function()
  			BackgroundTransparency = 1,
  			BorderSizePixel = 0,
  			Text = lettersText,
- 			Font = Enum.Font.GothamBlack,
+ 			Font = pickFont("GothamBlack", "GothamBold"),
  			TextSize = letterSize + (boost or 0),
  			TextColor3 = color,
  			TextTransparency = transparency or 0,
@@ -395,7 +494,7 @@ local UI = (function()
  			BackgroundTransparency = 1,
  			BorderSizePixel = 0,
  			Text = o.hubText or "Hub",
- 			Font = Enum.Font.GothamBlack,
+ 			Font = pickFont("GothamBlack", "GothamBold"),
  			TextSize = ds * 0.16,
  			TextColor3 = Color3.fromRGB(255, 255, 255),
  			TextXAlignment = Enum.TextXAlignment.Center,
@@ -543,14 +642,110 @@ local UI = (function()
 
  --==========================================================================
  -- 启动动画
+ --   刻意不依赖 TweenService：整段动画按时间自己插值。
+ --   任何一步出错、或者动画根本没跑起来，也会在超时后被强制放行，
+ --   保证「主界面一定出得来」。
  --==========================================================================
+ local function spWait(t)
+ 	if task and task.wait then
+ 		local ok, dt = pcall(task.wait, t)
+ 		if ok then
+ 			return tonumber(dt) or t
+ 		end
+ 	end
+ 	if wait then
+ 		local ok, dt = pcall(wait, t)
+ 		if ok then
+ 			return tonumber(dt) or t
+ 		end
+ 	end
+ 	return t
+ end
+
+ -- 按帧累加真实经过的时间（不用 os.clock：个别环境里它走得比真实时间慢）
+ local SP_CLAMP = 0.12
+ local function spTick(t)
+ 	local dt = spWait(0.016)
+ 	dt = tonumber(dt) or 0.016
+ 	if dt <= 0 or dt > SP_CLAMP then
+ 		dt = 0.016
+ 	end
+ 	return t + dt
+ end
+
+ local function spSpawn(fn)
+ 	if task and task.spawn then
+ 		local ok, thread = pcall(task.spawn, fn)
+ 		if ok then
+ 			return thread
+ 		end
+ 	end
+ 	if spawn then
+ 		local ok, thread = pcall(spawn, fn)
+ 		if ok then
+ 			return thread
+ 		end
+ 	end
+ 	local co = coroutine.create(fn)
+ 	pcall(coroutine.resume, co)
+ 	return co
+ end
+
+ local function spDelay(t, fn)
+ 	if task and task.delay then
+ 		local ok = pcall(task.delay, t, fn)
+ 		if ok then
+ 			return
+ 		end
+ 	end
+ 	if delay then
+ 		local ok = pcall(delay, t, fn)
+ 		if ok then
+ 			return
+ 		end
+ 	end
+ 	spSpawn(function()
+ 		spWait(t)
+ 		pcall(fn)
+ 	end)
+ end
+
+ local function setp(inst, prop, value)
+ 	if not inst then
+ 		return
+ 	end
+ 	pcall(function()
+ 		inst[prop] = value
+ 	end)
+ end
+
+ local function c01(v)
+ 	if v < 0 then
+ 		return 0
+ 	elseif v > 1 then
+ 		return 1
+ 	end
+ 	return v
+ end
+
+ local function easeOutCubic(t)
+ 	local u = 1 - t
+ 	return 1 - u * u * u
+ end
+
+ local function easeOutBack(t)
+ 	local c1, c3 = 1.70158, 2.70158
+ 	local u = t - 1
+ 	return 1 + c3 * u * u * u + c1 * u * u
+ end
+
  function UI.Splash(o)
  	o = o or {}
  	local accent = o.accent or Theme.Accent
  	local shortName = o.name or "SA"
  	local fullName = o.fullName or (shortName .. " HUB")
  	local version = o.version or "1.0.0"
- 	local minTime = o.minTime or 2.2
+ 	local minTime = math.max(o.minTime or 2.2, 0.6)
 
  	local screen = new("ScreenGui", {
  		Name = "SAHubSplash",
@@ -601,13 +796,33 @@ local UI = (function()
  		Parent = backdrop,
  	})
 
- 	local crest = UI.Crest({
- 		parent = center,
- 		designSize = crestSize,
- 		position = UDim2.new(0.5, 0, 0.5, -crestSize * 0.30),
- 		text = shortName,
- 		hubText = o.hubText or "Hub",
- 	})
+ 	-- 徽标整个构建包一层 pcall：徽标万一画不出来，也只是缺个标，不影响动画和主界面
+ 	local crest = nil
+ 	local okCrest = pcall(function()
+ 		crest = UI.Crest({
+ 			parent = center,
+ 			designSize = crestSize,
+ 			position = UDim2.new(0.5, 0, 0.5, -crestSize * 0.30),
+ 			text = shortName,
+ 			hubText = o.hubText or "Hub",
+ 		})
+ 	end)
+ 	if not okCrest then
+ 		crest = nil
+ 	end
+
+ 	local crownBase = nil
+ 	local crownDrift = crestSize * 0.12
+ 	if crest and crest.Crown then
+ 		pcall(function()
+ 			crownBase = crest.Crown.Position
+ 		end)
+ 		if crest.FadeTo then
+ 			pcall(function()
+ 				crest:SetOpacity(0)
+ 			end)
+ 		end
+ 	end
 
  	local tagline = new("TextLabel", {
  		AnchorPoint = Vector2.new(0.5, 0.5),
@@ -615,7 +830,7 @@ local UI = (function()
  		Size = UDim2.fromOffset(340, 16),
  		BackgroundTransparency = 1,
  		Text = string.upper(fullName) .. "  ·  V" .. version,
- 		Font = Enum.Font.GothamMedium,
+ 		Font = pickFont("GothamMedium", "Gotham"),
  		TextSize = 9,
  		TextColor3 = Theme.SubText,
  		TextTransparency = 1,
@@ -653,7 +868,7 @@ local UI = (function()
  		Position = UDim2.new(1, 0, 0.5, 0),
  		Size = UDim2.fromOffset(12, 12),
  		BackgroundColor3 = Theme.Secondary,
- 		BackgroundTransparency = 0.4,
+ 		BackgroundTransparency = 1,
  		BorderSizePixel = 0,
  		Parent = barFill,
  	})
@@ -665,7 +880,7 @@ local UI = (function()
  		Size = UDim2.fromOffset(340, 16),
  		BackgroundTransparency = 1,
  		Text = "",
- 		Font = Enum.Font.Gotham,
+ 		Font = pickFont("Gotham", "SourceSans"),
  		TextSize = 10,
  		TextColor3 = Theme.SubText,
  		TextTransparency = 1,
@@ -678,7 +893,7 @@ local UI = (function()
  		Size = UDim2.fromOffset(340, 14),
  		BackgroundTransparency = 1,
  		Text = "0%",
- 		Font = Enum.Font.GothamBold,
+ 		Font = pickFont("GothamBold", "Gotham"),
  		TextSize = 10,
  		TextColor3 = Theme.Dim,
  		TextTransparency = 1,
@@ -693,26 +908,6 @@ local UI = (function()
  		Parent = screen,
  	})
 
- 	tw(backdrop, 0.5, { BackgroundTransparency = 0 })
- 	tw(tagline, 0.7, { TextTransparency = 0.25 })
- 	tw(barTrack, 0.5, { BackgroundTransparency = 0.15 })
- 	tw(status, 0.6, { TextTransparency = 0.2 })
- 	tw(percent, 0.6, { TextTransparency = 0.4 })
-
- 	-- 徽标：整体淡入 + 皇冠下落 + 轨道环旋转 + 光晕呼吸
- 	crest:SetOpacity(0)
- 	crest:FadeTo(1, 0.55, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
- 	crest:StartSpin()
- 	crest:StartPulse()
-
- 	local crownBasePos = crest.Crown.Position
- 	crest.Crown.Position = UDim2.new(crownBasePos.X.Scale, crownBasePos.X.Offset, crownBasePos.Y.Scale, crownBasePos.Y.Offset - crestSize * 0.12)
- 	task.delay(0.12, function()
- 		if crest.Crown.Parent then
- 			tw(crest.Crown, 0.7, { Position = crownBasePos }, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
- 		end
- 	end)
-
  	local statusLines = {
  		{ 0.00, "正在初始化核心…" },
  		{ 0.22, "正在载入界面引擎…" },
@@ -722,13 +917,7 @@ local UI = (function()
  		{ 0.97, "即将就绪…" },
  	}
 
- 	local progress = 0
- 	local ready = false
- 	local finished = false
- 	local startedAt = os.clock()
- 	local revealFn = nil
-
- 	local function currentStatus(p)
+ 	local function statusFor(p)
  		local text = statusLines[1][2]
  		for _, entry in ipairs(statusLines) do
  			if p >= entry[1] then
@@ -738,61 +927,133 @@ local UI = (function()
  		return text
  	end
 
- 	local function doFinish()
- 		if finished then
- 			return
- 		end
- 		finished = true
- 		if barFill.Parent then
- 			tw(barFill, 0.22, { Size = UDim2.fromScale(1, 1) })
- 			percent.Text = "100%"
- 			status.Text = "启动完成"
- 			tw(status, 0.15, { TextTransparency = 0 })
- 		end
- 		tw(flash, 0.14, { BackgroundTransparency = 0.55 })
- 		task.wait(0.16)
- 		tw(flash, 0.3, { BackgroundTransparency = 1 })
- 		crest:FadeTo(0, 0.3)
- 		tw(tagline, 0.25, { TextTransparency = 1 })
- 		tw(status, 0.25, { TextTransparency = 1 })
- 		tw(percent, 0.25, { TextTransparency = 1 })
- 		tw(barTrack, 0.25, { BackgroundTransparency = 1 })
- 		tw(barFill, 0.25, { BackgroundTransparency = 1 })
- 		tw(backdrop, 0.45, { BackgroundTransparency = 1 })
- 		task.wait(0.45)
- 		screen:Destroy()
- 		if revealFn then
- 			pcall(revealFn)
+ 	local finished = false
+ 	local revealed = false
+ 	local revealFn = nil
+ 	local skipRequested = false
+
+ 	local function stopCrest()
+ 		if crest and crest.Stop then
+ 			pcall(function()
+ 				crest:Stop()
+ 			end)
  		end
  	end
 
- 	task.spawn(function()
- 		while not finished do
- 			local elapsed = os.clock() - startedAt
- 			local target = ready and 1 or 0.94
- 			progress = progress + ((target - progress) * 0.035) + 0.0025
- 			if progress > target then
- 				progress = target
- 			end
- 			if barFill.Parent then
- 				barFill.Size = UDim2.fromScale(progress, 1)
- 				percent.Text = tostring(math.floor(progress * 100)) .. "%"
- 				status.Text = currentStatus(progress)
- 			end
- 			if progress >= 0.995 and (ready or elapsed >= minTime) then
- 				doFinish()
- 				break
- 			end
- 			task.wait(0.02)
+ 	local function revealOnce()
+ 		if revealed then
+ 			return
  		end
+ 		revealed = true
+ 		finished = true
+ 		stopCrest()
+ 		pcall(function()
+ 			if screen and screen.Parent ~= nil then
+ 				screen:Destroy()
+ 			end
+ 		end)
+ 		local cb = revealFn
+ 		if cb then
+ 			pcall(cb)
+ 		end
+ 	end
+
+ 	-- 徽标动画（旋转 / 呼吸）本身也包一层，出问题只是不动，不影响收尾
+ 	if crest then
+ 		pcall(function()
+ 			crest:StartSpin()
+ 		end)
+ 		pcall(function()
+ 			crest:StartPulse()
+ 		end)
+ 	end
+
+ 	-- 主驱动：按时间插值，每帧直接写属性（不用 TweenService）
+ 	spSpawn(function()
+ 		pcall(function()
+ 			local t = 0
+
+ 			while true do
+ 				local fade = c01(t / 0.55)
+
+ 				setp(backdrop, "BackgroundTransparency", 1 - fade)
+ 				if crest and crest.SetOpacity then
+ 					pcall(function()
+ 						crest:SetOpacity(fade)
+ 					end)
+ 				end
+
+ 				-- 皇冠从上落下回弹
+ 				if crest and crest.Crown and crownBase then
+ 					local drop = easeOutBack(c01((t - 0.10) / 0.85))
+ 					local y = crownBase.Y.Offset - crownDrift * (1 - drop)
+ 					pcall(function()
+ 						crest.Crown.Position = UDim2.new(crownBase.X.Scale, crownBase.X.Offset, crownBase.Y.Scale, y)
+ 					end)
+ 				end
+
+ 				local soft = c01((t - 0.25) / 0.7)
+ 				setp(tagline, "TextTransparency", 1 - 0.75 * soft)
+ 				setp(barTrack, "BackgroundTransparency", 1 - 0.85 * soft)
+ 				setp(barGlow, "BackgroundTransparency", 1 - 0.5 * soft)
+ 				setp(status, "TextTransparency", 1 - 0.8 * soft)
+ 				setp(percent, "TextTransparency", 1 - 0.6 * soft)
+
+ 				local raw = c01((t - 0.30) / math.max(minTime - 0.30, 0.2))
+ 				local p = 1 - (1 - raw) * (1 - raw)
+ 				setp(barFill, "Size", UDim2.fromScale(p, 1))
+ 				setp(percent, "Text", tostring(math.floor(p * 100)) .. "%")
+ 				setp(status, "Text", statusFor(p))
+
+ 				if t >= minTime or skipRequested then
+ 					break
+ 				end
+ 				t = spTick(t)
+ 			end
+
+ 			-- 收尾：满格 → 白闪 → 淡出
+ 			setp(barFill, "Size", UDim2.fromScale(1, 1))
+ 			setp(percent, "Text", "100%")
+ 			setp(status, "Text", "启动完成")
+ 			setp(status, "TextTransparency", 0)
+
+ 			local fp = 0
+ 			while fp < 0.14 do
+ 				local k = c01(fp / 0.14)
+ 				setp(flash, "BackgroundTransparency", 1 - 0.5 * k)
+ 				fp = spTick(fp)
+ 			end
+
+ 			local fo = 0
+ 			while fo < 0.34 do
+ 				local k = c01(fo / 0.34)
+ 				setp(flash, "BackgroundTransparency", 1 - 0.5 * (1 - k))
+ 				setp(backdrop, "BackgroundTransparency", k)
+ 				setp(tagline, "TextTransparency", k)
+ 				setp(status, "TextTransparency", k)
+ 				setp(percent, "TextTransparency", k)
+ 				setp(barTrack, "BackgroundTransparency", k)
+ 				setp(barFill, "BackgroundTransparency", k)
+ 				setp(barGlow, "BackgroundTransparency", k)
+ 				if crest and crest.SetOpacity then
+ 					pcall(function()
+ 						crest:SetOpacity(1 - k)
+ 					end)
+ 				end
+ 				fo = spTick(fo)
+ 			end
+ 		end)
+
+ 		-- 不管上面走到哪一步，收尾一定是这一句
+ 		revealOnce()
  	end)
 
- 	task.delay(minTime, function()
- 		if not finished then
- 			ready = true
- 		end
+ 	-- 看门狗：动画万一没跑起来（被拦 / 卡住 / 报错），到点直接放行主界面
+ 	spDelay(minTime + 2.5, function()
+ 		revealOnce()
  	end)
 
+ 	-- 点屏幕可以跳过
  	local skipBtn = new("TextButton", {
  		Size = UDim2.fromScale(1, 1),
  		BackgroundTransparency = 1,
@@ -800,30 +1061,34 @@ local UI = (function()
  		AutoButtonColor = false,
  		Parent = backdrop,
  	})
- 	skipBtn.MouseButton1Click:Connect(function()
- 		if not finished then
- 			ready = true
- 			progress = math.max(progress, 0.9)
- 		end
+ 	pcall(function()
+ 		skipBtn.MouseButton1Click:Connect(function()
+ 			skipRequested = true
+ 		end)
  	end)
 
  	local splash = {}
  	function splash:Finish(callback)
  		revealFn = callback
- 		ready = true
- 		progress = math.max(progress, 0.9)
+ 		if revealed then
+ 			pcall(callback)
+ 		end
  	end
  	function splash:IsFinished()
  		return finished
  	end
+ 	function splash:Skip()
+ 		skipRequested = true
+ 	end
  	function splash:Destroy()
+ 		revealed = true
  		finished = true
- 		if crest then
- 			crest:Stop()
- 		end
- 		if screen then
- 			screen:Destroy()
- 		end
+ 		stopCrest()
+ 		pcall(function()
+ 			if screen and screen.Parent ~= nil then
+ 				screen:Destroy()
+ 			end
+ 		end)
  	end
  	return splash
  end
@@ -941,7 +1206,7 @@ local UI = (function()
  		Text = title,
  		TextXAlignment = Enum.TextXAlignment.Left,
  		TextTruncate = Enum.TextTruncate.AtEnd,
- 		Font = Enum.Font.GothamBold,
+ 		Font = pickFont("GothamBold", "Gotham"),
  		TextSize = 13,
  		TextColor3 = Theme.Text,
  		Parent = topbar,
@@ -961,7 +1226,7 @@ local UI = (function()
  		BackgroundTransparency = 1,
  		Text = subtitle,
  		TextTruncate = Enum.TextTruncate.AtEnd,
- 		Font = Enum.Font.GothamBold,
+ 		Font = pickFont("GothamBold", "Gotham"),
  		TextSize = 9,
  		TextColor3 = Theme.SubText,
  		Parent = verTag,
@@ -983,7 +1248,7 @@ local UI = (function()
  		Position = UDim2.new(0, 8, 0.5, -7),
  		BackgroundTransparency = 1,
  		Text = "⌕",
- 		Font = Enum.Font.GothamBold,
+ 		Font = pickFont("GothamBold", "Gotham"),
  		TextSize = 13,
  		TextColor3 = Theme.Dim,
  		Parent = searchBox,
@@ -995,7 +1260,7 @@ local UI = (function()
  		Text = "",
  		PlaceholderText = "搜索功能…",
  		PlaceholderColor3 = Theme.Dim,
- 		Font = Enum.Font.GothamMedium,
+ 		Font = pickFont("GothamMedium", "Gotham"),
  		TextSize = 11,
  		TextColor3 = Theme.Text,
  		TextXAlignment = Enum.TextXAlignment.Left,
@@ -1024,7 +1289,7 @@ local UI = (function()
  			BackgroundColor3 = Theme.Element,
  			BackgroundTransparency = 0.4,
  			Text = text,
- 			Font = Enum.Font.GothamBold,
+ 			Font = pickFont("GothamBold", "Gotham"),
  			TextSize = 14,
  			TextColor3 = color or Theme.SubText,
  			AutoButtonColor = false,
@@ -1099,7 +1364,7 @@ local UI = (function()
  		Size = UDim2.fromScale(1, 1),
  		BackgroundTransparency = 1,
  		Text = string.upper(string.sub(LocalPlayer.Name, 1, 1)),
- 		Font = Enum.Font.GothamBold,
+ 		Font = pickFont("GothamBold", "Gotham"),
  		TextSize = 12,
  		TextColor3 = Theme.Text,
  		Parent = avatar,
@@ -1112,7 +1377,7 @@ local UI = (function()
  		Text = LocalPlayer.DisplayName or LocalPlayer.Name,
  		TextXAlignment = Enum.TextXAlignment.Left,
  		TextTruncate = Enum.TextTruncate.AtEnd,
- 		Font = Enum.Font.GothamBold,
+ 		Font = pickFont("GothamBold", "Gotham"),
  		TextSize = 11,
  		TextColor3 = Theme.Text,
  		Parent = userCard,
@@ -1137,7 +1402,7 @@ local UI = (function()
  		Text = executorName,
  		TextXAlignment = Enum.TextXAlignment.Left,
  		TextTruncate = Enum.TextTruncate.AtEnd,
- 		Font = Enum.Font.Gotham,
+ 		Font = pickFont("Gotham", "SourceSans"),
  		TextSize = 9,
  		TextColor3 = Theme.Dim,
  		Parent = userCard,
@@ -1350,7 +1615,7 @@ local UI = (function()
  			Text = title .. "  " .. subtitle,
  			TextXAlignment = Enum.TextXAlignment.Left,
  			TextTruncate = Enum.TextTruncate.AtEnd,
- 			Font = Enum.Font.GothamMedium,
+ 			Font = pickFont("GothamMedium", "Gotham"),
  			TextSize = 10,
  			TextColor3 = Theme.SubText,
  			Parent = watermark,
@@ -1481,7 +1746,7 @@ local UI = (function()
  		BackgroundTransparency = 1,
  		Text = o.Title or "提示",
  		TextXAlignment = Enum.TextXAlignment.Left,
- 		Font = Enum.Font.GothamBold,
+ 		Font = pickFont("GothamBold", "Gotham"),
  		TextSize = 12,
  		TextColor3 = Theme.Text,
  		TextTransparency = 1,
@@ -1496,7 +1761,7 @@ local UI = (function()
  		TextXAlignment = Enum.TextXAlignment.Left,
  		TextYAlignment = Enum.TextYAlignment.Top,
  		TextWrapped = true,
- 		Font = Enum.Font.Gotham,
+ 		Font = pickFont("Gotham", "SourceSans"),
  		TextSize = 10,
  		TextColor3 = Theme.SubText,
  		TextTransparency = 1,
@@ -1527,8 +1792,11 @@ local UI = (function()
  		tw(titleLabel, 0.2, { TextTransparency = 1 })
  		tw(bodyLabel, 0.2, { TextTransparency = 1 })
  		tw(lifeBar, 0.2, { BackgroundTransparency = 1 })
- 		task.wait(0.3)
- 		card:Destroy()
+ 		task.delay(0.3, function()
+ 			pcall(function()
+ 				card:Destroy()
+ 			end)
+ 		end)
  	end)
  end
 
@@ -1591,7 +1859,7 @@ local UI = (function()
  		Position = UDim2.new(0, 13, 0.5, -9),
  		BackgroundTransparency = 1,
  		Text = o.Icon or "•",
- 		Font = Enum.Font.GothamBold,
+ 		Font = pickFont("GothamBold", "Gotham"),
  		TextSize = 13,
  		TextColor3 = Theme.SubText,
  		Parent = btn,
@@ -1604,7 +1872,7 @@ local UI = (function()
  		Text = tabName,
  		TextXAlignment = Enum.TextXAlignment.Left,
  		TextTruncate = Enum.TextTruncate.AtEnd,
- 		Font = Enum.Font.GothamMedium,
+ 		Font = pickFont("GothamMedium", "Gotham"),
  		TextSize = 12,
  		TextColor3 = Theme.SubText,
  		Parent = btn,
@@ -1757,7 +2025,7 @@ local UI = (function()
  		BackgroundTransparency = 1,
  		Text = string.upper(title or "SECTION"),
  		TextXAlignment = Enum.TextXAlignment.Left,
- 		Font = Enum.Font.GothamBold,
+ 		Font = pickFont("GothamBold", "Gotham"),
  		TextSize = 10,
  		TextColor3 = Theme.Dim,
  		Parent = frame,
@@ -1804,7 +2072,7 @@ local UI = (function()
  		Text = text or "",
  		TextXAlignment = Enum.TextXAlignment.Left,
  		TextWrapped = true,
- 		Font = Enum.Font.Gotham,
+ 		Font = pickFont("Gotham", "SourceSans"),
  		TextSize = 11,
  		TextColor3 = Theme.SubText,
  		Parent = row,
@@ -1848,7 +2116,7 @@ local UI = (function()
  		Text = o.Name or "开关",
  		TextXAlignment = Enum.TextXAlignment.Left,
  		TextTruncate = Enum.TextTruncate.AtEnd,
- 		Font = Enum.Font.GothamMedium,
+ 		Font = pickFont("GothamMedium", "Gotham"),
  		TextSize = 12,
  		TextColor3 = Theme.Text,
  		Parent = row,
@@ -1961,7 +2229,7 @@ local UI = (function()
  		Text = o.Name or "滑条",
  		TextXAlignment = Enum.TextXAlignment.Left,
  		TextTruncate = Enum.TextTruncate.AtEnd,
- 		Font = Enum.Font.GothamMedium,
+ 		Font = pickFont("GothamMedium", "Gotham"),
  		TextSize = 12,
  		TextColor3 = Theme.Text,
  		Parent = row,
@@ -1973,7 +2241,7 @@ local UI = (function()
  		BackgroundColor3 = Theme.PanelLight,
  		BackgroundTransparency = 0.3,
  		Text = "",
- 		Font = Enum.Font.GothamBold,
+ 		Font = pickFont("GothamBold", "Gotham"),
  		TextSize = 10,
  		TextColor3 = Theme.SubText,
  		Parent = row,
@@ -2124,7 +2392,7 @@ local UI = (function()
  		Text = o.Name or "按钮",
  		TextXAlignment = Enum.TextXAlignment.Left,
  		TextTruncate = Enum.TextTruncate.AtEnd,
- 		Font = Enum.Font.GothamMedium,
+ 		Font = pickFont("GothamMedium", "Gotham"),
  		TextSize = 12,
  		TextColor3 = Theme.Text,
  		Parent = row,
@@ -2135,7 +2403,7 @@ local UI = (function()
  		Position = UDim2.new(1, -24, 0.5, -8),
  		BackgroundTransparency = 1,
  		Text = "›",
- 		Font = Enum.Font.GothamBold,
+ 		Font = pickFont("GothamBold", "Gotham"),
  		TextSize = 14,
  		TextColor3 = Theme.Dim,
  		Parent = row,
@@ -2191,7 +2459,7 @@ local UI = (function()
  		Text = o.Name or "输入",
  		TextXAlignment = Enum.TextXAlignment.Left,
  		TextTruncate = Enum.TextTruncate.AtEnd,
- 		Font = Enum.Font.GothamMedium,
+ 		Font = pickFont("GothamMedium", "Gotham"),
  		TextSize = 12,
  		TextColor3 = Theme.Text,
  		Parent = row,
@@ -2215,7 +2483,7 @@ local UI = (function()
  		Text = o.Default or "",
  		PlaceholderText = o.Placeholder or "输入…",
  		PlaceholderColor3 = Theme.Dim,
- 		Font = Enum.Font.GothamMedium,
+ 		Font = pickFont("GothamMedium", "Gotham"),
  		TextSize = 11,
  		TextColor3 = Theme.Text,
  		TextXAlignment = Enum.TextXAlignment.Left,
@@ -2279,7 +2547,7 @@ local UI = (function()
  		Text = o.Name or "选择",
  		TextXAlignment = Enum.TextXAlignment.Left,
  		TextTruncate = Enum.TextTruncate.AtEnd,
- 		Font = Enum.Font.GothamMedium,
+ 		Font = pickFont("GothamMedium", "Gotham"),
  		TextSize = 12,
  		TextColor3 = Theme.Text,
  		Parent = row,
@@ -2303,7 +2571,7 @@ local UI = (function()
  		Text = tostring(o.Default or options[1] or "—"),
  		TextXAlignment = Enum.TextXAlignment.Left,
  		TextTruncate = Enum.TextTruncate.AtEnd,
- 		Font = Enum.Font.GothamMedium,
+ 		Font = pickFont("GothamMedium", "Gotham"),
  		TextSize = 11,
  		TextColor3 = Theme.SubText,
  		Parent = display,
@@ -2314,7 +2582,7 @@ local UI = (function()
  		Position = UDim2.new(1, -20, 0.5, -7),
  		BackgroundTransparency = 1,
  		Text = "▾",
- 		Font = Enum.Font.GothamBold,
+ 		Font = pickFont("GothamBold", "Gotham"),
  		TextSize = 10,
  		TextColor3 = Theme.Dim,
  		Parent = display,
@@ -2386,7 +2654,7 @@ local UI = (function()
  				BackgroundTransparency = 1,
  				Text = tostring(option),
  				TextXAlignment = Enum.TextXAlignment.Left,
- 				Font = Enum.Font.GothamMedium,
+ 				Font = pickFont("GothamMedium", "Gotham"),
  				TextSize = 11,
  				TextColor3 = (value == option) and Theme.Text or Theme.SubText,
  				AutoButtonColor = false,
@@ -2477,7 +2745,7 @@ local UI = (function()
  		BackgroundTransparency = 1,
  		Text = o.Name or "按键绑定",
  		TextXAlignment = Enum.TextXAlignment.Left,
- 		Font = Enum.Font.GothamMedium,
+ 		Font = pickFont("GothamMedium", "Gotham"),
  		TextSize = 12,
  		TextColor3 = Theme.Text,
  		Parent = row,
@@ -2489,7 +2757,7 @@ local UI = (function()
  		BackgroundColor3 = Theme.PanelLight,
  		BackgroundTransparency = 0.2,
  		Text = o.Default and o.Default.Name or "未绑定",
- 		Font = Enum.Font.GothamBold,
+ 		Font = pickFont("GothamBold", "Gotham"),
  		TextSize = 10,
  		TextColor3 = Theme.SubText,
  		Parent = row,
@@ -3159,14 +3427,9 @@ end)()
 --==========================================================================
 -- 3) 入口：把界面和功能接起来
 --==========================================================================
-local splash = UI.Splash({
-	name = CONFIG.Name,
-	fullName = CONFIG.FullName,
-	version = CONFIG.Version,
-	accent = CONFIG.Accent,
-	minTime = 2.2,
-})
-
+-- 先把主窗口建好，再放启动动画。
+-- 这样即使动画那一层出了问题（执行器拦 TweenService、动画报错等），
+-- 主界面也一定出得来 —— 不会再出现「只看到一个徽标停在那儿」。
 local Window = UI.Window({
 	title = CONFIG.FullName,
 	subtitle = "v" .. CONFIG.Version,
@@ -3208,18 +3471,64 @@ do
 	end
 end
 
-splash:Finish(function()
+local revealed = false
+local function reveal()
+	if revealed then
+		return
+	end
+	revealed = true
 	Window:Show()
 	if features then
 		pcall(features.applyMovement)
 		pcall(features.applyFov)
 	end
-	task.wait(0.4)
-	Window:Notify({
-		Title = CONFIG.FullName .. " 已就绪",
-		Text = "按 " .. CONFIG.ToggleKey.Name .. " 呼出或隐藏面板",
-		Duration = 4,
-	})
-end)
+	-- 提示气泡放到单独的线程里弹，不在回调里做等待
+	task.spawn(function()
+		task.wait(0.4)
+		pcall(function()
+			Window:Notify({
+				Title = CONFIG.FullName .. " 已就绪",
+				Text = "按 " .. CONFIG.ToggleKey.Name .. " 呼出或隐藏面板",
+				Duration = 4,
+			})
+		end)
+	end)
+end
+
+-- 启动动画整块包 pcall：它自己坏了就跳过动画直接进主界面
+local splash = nil
+do
+	local okSplash, result = pcall(function()
+		return UI.Splash({
+			name = CONFIG.Name,
+			fullName = CONFIG.FullName,
+			version = CONFIG.Version,
+			accent = CONFIG.Accent,
+			minTime = 2.2,
+		})
+	end)
+	if okSplash and result then
+		splash = result
+	end
+end
+
+if splash then
+	splash:Finish(reveal)
+	-- 最后一道兜底：动画那层的线程万一被掐断，主线程自己也会把窗口放出来
+	for _ = 1, 140 do
+		if revealed then
+			break
+		end
+		task.wait(0.05)
+	end
+	pcall(function()
+		if splash.Destroy then
+			splash:Destroy()
+		end
+	end)
+	reveal()
+else
+	reveal()
+end
 
 return Window
