@@ -14,7 +14,7 @@
 ==========================================================================]]
 
 local CONFIG = {
-	Base = "https://raw.githubusercontent.com/USER/REPO/main/",
+	Base = "https://raw.githubusercontent.com/lpy987131/SA-HUB/refs/heads/main/SA_HUB.lua",
 	Name = "SA",
 	FullName = "SA HUB",
 	Version = "1.1.0",
