@@ -8,32 +8,7 @@ local CONFIG = {
 	RawUrl = (getgenv and getgenv().SA_HUB_RAW) or "",
 }
 
---==========================================================================
--- 1) UI 框架（原 src/UI.lua）
---==========================================================================
 local UI = (function()
- --[[==========================================================================
- 	SA HUB · UI 框架  (src/UI.lua)
- 	------------------------------------------------------------------
- 	纯界面层，不含任何具体功能。可以被任何脚本复用。
- 	API 简介：
- 		local UI = loadstring(game:HttpGet(".../src/UI.lua"))()
- 		local splash = UI.Splash({ name = "SA", fullName = "SA HUB", version = "1.0.0" })
- 		local Window = UI.Window({ title = "SA HUB", toggleKey = Enum.KeyCode.RightShift })
-
- 		local tab = Window:Tab({ Name = "首页", Icon = "★" })
- 		local sec = tab:Section("欢迎")
- 		sec:Toggle({ Name = "开关", Flag = "myToggle", Default = false, Callback = function(v) end })
- 		sec:Slider({ Name = "数值", Min = 0, Max = 100, Default = 50, Flag = "mySlider", Callback = function(v) end })
- 		sec:Button({ Name = "按钮", Callback = function() end })
- 		sec:Dropdown({ Name = "选择", Options = {"A","B"}, Default = "A", Flag = "myPick", Callback = function(v) end })
- 		sec:Textbox({ Name = "输入", Placeholder = "…", Flag = "myText", Callback = function(v) end })
- 		sec:Keybind({ Name = "按键", Default = Enum.KeyCode.F, Flag = "myKey" })
- 		sec:Label("说明文字")
-
- 	splash:Finish(function() Window:Show() end)
- ==========================================================================]]
-
  local Players = game:GetService("Players")
  local UserInputService = game:GetService("UserInputService")
  local TweenService = game:GetService("TweenService")
@@ -62,9 +37,6 @@ local UI = (function()
 
  local Theme = UI.Theme
 
- --==========================================================================
- -- 工具
- --==========================================================================
  local function new(class, props, children)
  	local inst = Instance.new(class)
  	if props then
